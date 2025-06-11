@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -26,12 +27,23 @@ class _HomeScreenState extends State<HomeScreen> {
   String _locationStatus = 'Getting location...';
   bool _showMap = false;
   final MapController _mapController = MapController();
+  Timer? _locationRefreshTimer;
+  DateTime? _lastLocationUpdate;
+  bool _isRefreshingLocation = false;
+  int _refreshIntervalSeconds = 3; // Default 3 seconds
 
   @override
   void initState() {
     super.initState();
     _loadDestinations();
     _getCurrentLocation();
+    _startLocationRefreshTimer();
+  }
+
+  @override
+  void dispose() {
+    _locationRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDestinations() async {
@@ -42,22 +54,57 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isRefreshingLocation = true;
+    });
+
     try {
       final position = await _locationService.getCurrentPosition();
       if (position != null) {
         setState(() {
           _currentPosition = position;
+          _lastLocationUpdate = DateTime.now();
           _locationStatus = 'Location updated';
+          _isRefreshingLocation = false;
         });
       } else {
         setState(() {
           _locationStatus = 'Location unavailable';
+          _isRefreshingLocation = false;
         });
       }
     } catch (e) {
       setState(() {
         _locationStatus = 'Location error';
+        _isRefreshingLocation = false;
       });
+    }
+  }
+
+  void _startLocationRefreshTimer() {
+    _locationRefreshTimer?.cancel(); // Cancel existing timer
+    _locationRefreshTimer =
+        Timer.periodic(Duration(seconds: _refreshIntervalSeconds), (timer) {
+      if (mounted) {
+        _getCurrentLocation();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  String _getLocationAge() {
+    if (_lastLocationUpdate == null) return '';
+
+    final now = DateTime.now();
+    final diff = now.difference(_lastLocationUpdate!).inSeconds;
+
+    if (diff < 60) {
+      return '${diff}s ago';
+    } else if (diff < 3600) {
+      return '${(diff / 60).floor()}m ago';
+    } else {
+      return '${(diff / 3600).floor()}h ago';
     }
   }
 
@@ -104,6 +151,40 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showRefreshSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Location Refresh Settings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Choose how often to update your current location:'),
+            const SizedBox(height: 16),
+            ...([3, 5, 10, 15, 30].map((seconds) => RadioListTile<int>(
+                  title: Text('Every $seconds seconds'),
+                  value: seconds,
+                  groupValue: _refreshIntervalSeconds,
+                  onChanged: (value) {
+                    setState(() {
+                      _refreshIntervalSeconds = value!;
+                    });
+                    _startLocationRefreshTimer(); // Restart timer with new interval
+                    Navigator.pop(context);
+                  },
+                ))),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Marker> _buildMapMarkers() {
     List<Marker> markers = [];
 
@@ -148,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
         CircleMarker(
           point: LatLng(destination.latitude, destination.longitude),
           radius: destination.radiusInMeters,
-          useRadiusInMeter: true, // This makes the radius scale properly with zoom
+          useRadiusInMeter: true,
           color: Colors.red.withValues(alpha: 0.2),
           borderColor: Colors.red,
           borderStrokeWidth: 2,
@@ -173,13 +254,27 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Row(
                 children: [
-                  Icon(
-                    _currentPosition != null
-                        ? Icons.location_on
-                        : Icons.location_off,
-                    color:
-                        _currentPosition != null ? Colors.blue : Colors.orange,
-                  ),
+                  _isRefreshingLocation
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _currentPosition != null
+                                  ? Colors.blue
+                                  : Colors.orange,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          _currentPosition != null
+                              ? Icons.location_on
+                              : Icons.location_off,
+                          color: _currentPosition != null
+                              ? Colors.blue
+                              : Colors.orange,
+                        ),
                   const SizedBox(width: 8),
                   Text(
                     'Current Location',
@@ -191,14 +286,36 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    _locationStatus,
-                    style: TextStyle(
-                      color: _currentPosition != null
-                          ? Colors.blue
-                          : Colors.orange,
-                      fontSize: 12,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _locationStatus,
+                        style: TextStyle(
+                          color: _currentPosition != null
+                              ? Colors.blue
+                              : Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_lastLocationUpdate != null) ...[
+                        Text(
+                          _getLocationAge(),
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 10,
+                          ),
+                        ),
+                        Text(
+                          'Refreshing every ${_refreshIntervalSeconds}s',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -516,10 +633,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
+                const PopupMenuItem(
+                  value: 'refresh_settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.timer, size: 20),
+                      SizedBox(width: 8),
+                      Text('Refresh Settings'),
+                    ],
+                  ),
+                ),
               ],
               onSelected: (value) {
                 if (value == 'test_alarm') {
                   _testAlarm();
+                } else if (value == 'refresh_settings') {
+                  _showRefreshSettings();
                 }
               },
             ),
