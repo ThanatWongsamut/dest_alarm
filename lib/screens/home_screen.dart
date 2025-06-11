@@ -139,6 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
         CircleMarker(
           point: LatLng(destination.latitude, destination.longitude),
           radius: destination.radiusInMeters,
+          useRadiusInMeter: true, // This makes the radius scale properly with zoom
           color: Colors.red.withValues(alpha: 0.2),
           borderColor: Colors.red,
           borderStrokeWidth: 2,

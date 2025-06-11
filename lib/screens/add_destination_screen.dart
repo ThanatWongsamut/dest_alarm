@@ -90,6 +90,7 @@ class _AddDestinationScreenState extends State<AddDestinationScreen> {
         CircleMarker(
           point: _selectedLocation!,
           radius: radius,
+          useRadiusInMeter: true, // Makes radius scale properly with zoom
           color: Colors.blue.withValues(alpha: 0.2),
           borderColor: Colors.blue,
           borderStrokeWidth: 2,
