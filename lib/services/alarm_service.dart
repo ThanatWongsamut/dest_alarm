@@ -78,17 +78,9 @@ class AlarmService {
     }
   }
 
-  Timer? _hapticTimer;
-
   void _playSystemAlertLoop() {
-    // Play system alert sound repeatedly
-    _hapticTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!_isAlarmActive) {
-        timer.cancel();
-        return;
-      }
-      HapticFeedback.vibrate();
-    });
+    // Simple fallback for when audio files don't work
+    HapticFeedback.vibrate();
   }
 
   Future<void> _startVibration() async {
@@ -202,11 +194,6 @@ class AlarmService {
     );
   }
 
-  BuildContext? _getOverlayContext() {
-    // This would need to be set by the main app
-    return _overlayContext;
-  }
-
   BuildContext? _getNavigatorContext() {
     // Try to get the current navigation context
     final navigatorKey = _getGlobalNavigatorKey();
@@ -221,7 +208,6 @@ class AlarmService {
   }
 
   void setOverlayContext(BuildContext context) {
-    print('Setting overlay context: $context');
     _overlayContext = context;
   }
 
@@ -233,8 +219,6 @@ class AlarmService {
     // Stop all timers
     _alarmTimer?.cancel();
     _alarmTimer = null;
-    _hapticTimer?.cancel();
-    _hapticTimer = null;
     _vibrationTimer?.cancel();
     _vibrationTimer = null;
     
@@ -255,7 +239,6 @@ class AlarmService {
 
   void dispose() {
     _audioPlayer.dispose();
-    _hapticTimer?.cancel();
     _vibrationTimer?.cancel();
     dismissAlarm();
   }

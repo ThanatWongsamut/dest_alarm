@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'services/notification_service.dart';
 import 'services/permission_service.dart';
 import 'services/alarm_service.dart';
 import 'screens/home_screen.dart';
@@ -9,9 +8,6 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await NotificationService.instance.initialize();
-  
   runApp(const DestinationAlarmApp());
 }
 

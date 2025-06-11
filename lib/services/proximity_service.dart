@@ -68,8 +68,10 @@ class ProximityService {
       
       final isWithin = distance <= destination.radiusInMeters;
 
-      // Debug: Print proximity check results
-      print('Proximity check - ${destination.name}: distance=${distance.toInt()}m, radius=${destination.radiusInMeters.toInt()}m, within=$isWithin');
+      // Keep essential proximity logging for debugging
+      if (isWithin) {
+        print('Proximity check - ${destination.name}: distance=${distance.toInt()}m, radius=${destination.radiusInMeters.toInt()}m, within=$isWithin');
+      }
 
       if (isWithin && !_triggeredDestinations.contains(destination.id)) {
         _triggeredDestinations.add(destination.id);
