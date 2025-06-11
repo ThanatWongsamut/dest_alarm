@@ -6,6 +6,7 @@ import '../models/destination.dart';
 import '../services/destination_storage_service.dart';
 import '../services/proximity_service.dart';
 import '../services/location_service.dart';
+import '../services/alarm_service.dart';
 import 'add_destination_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -92,6 +93,14 @@ class _HomeScreenState extends State<HomeScreen> {
         LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
         15,
       );
+    }
+  }
+
+  void _testAlarm() {
+    if (_destinations.isNotEmpty) {
+      // Use the first destination for testing
+      final testDestination = _destinations.first;
+      AlarmService.instance.triggerDestinationAlarm(testDestination);
     }
   }
 
@@ -493,6 +502,27 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _toggleMonitoring,
             tooltip: _isMonitoring ? 'Stop Monitoring' : 'Start Monitoring',
           ),
+          if (_destinations.isNotEmpty)
+            PopupMenuButton(
+              icon: const Icon(Icons.more_vert),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'test_alarm',
+                  child: Row(
+                    children: [
+                      Icon(Icons.alarm, size: 20),
+                      SizedBox(width: 8),
+                      Text('Test Alarm'),
+                    ],
+                  ),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'test_alarm') {
+                  _testAlarm();
+                }
+              },
+            ),
         ],
       ),
       body: _destinations.isEmpty && !_showMap

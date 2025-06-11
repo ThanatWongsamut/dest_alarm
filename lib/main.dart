@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/notification_service.dart';
 import 'services/permission_service.dart';
+import 'services/alarm_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/permission_screen.dart';
 
@@ -55,6 +56,13 @@ class _DestinationAlarmAppState extends State<DestinationAlarmApp> {
       routes: {
         '/home': (context) => const HomeScreen(),
         '/permissions': (context) => const PermissionScreen(),
+      },
+      builder: (context, child) {
+        // Set the overlay context for the alarm service
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          AlarmService.instance.setOverlayContext(context);
+        });
+        return child!;
       },
     );
   }

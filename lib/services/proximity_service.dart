@@ -3,7 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:workmanager/workmanager.dart';
 import 'location_service.dart';
 import 'destination_storage_service.dart';
-import 'notification_service.dart';
+import 'alarm_service.dart';
 
 class ProximityService {
   static ProximityService? _instance;
@@ -16,7 +16,7 @@ class ProximityService {
 
   final LocationService _locationService = LocationService.instance;
   final DestinationStorageService _storageService = DestinationStorageService();
-  final NotificationService _notificationService = NotificationService.instance;
+  final AlarmService _alarmService = AlarmService.instance;
   
   StreamSubscription<Position>? _positionSubscription;
   final Set<String> _triggeredDestinations = <String>{};
@@ -69,7 +69,7 @@ class ProximityService {
 
       if (isWithin && !_triggeredDestinations.contains(destination.id)) {
         _triggeredDestinations.add(destination.id);
-        await _notificationService.showDestinationAlarm(destination);
+        await _alarmService.triggerDestinationAlarm(destination);
       } else if (!isWithin && _triggeredDestinations.contains(destination.id)) {
         _triggeredDestinations.remove(destination.id);
       }
@@ -96,7 +96,7 @@ void callbackDispatcher() {
 Future<void> _performBackgroundProximityCheck() async {
   final locationService = LocationService.instance;
   final storageService = DestinationStorageService();
-  final notificationService = NotificationService.instance;
+  final alarmService = AlarmService.instance;
 
   final position = await locationService.getCurrentPosition();
   if (position == null) return;
@@ -113,7 +113,7 @@ Future<void> _performBackgroundProximityCheck() async {
     );
 
     if (isWithin) {
-      await notificationService.showDestinationAlarm(destination);
+      await alarmService.triggerDestinationAlarm(destination);
     }
   }
 }
