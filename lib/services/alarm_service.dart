@@ -9,7 +9,7 @@ import '../main.dart';
 class AlarmService {
   static AlarmService? _instance;
   AlarmService._internal();
-  
+
   static AlarmService get instance {
     _instance ??= AlarmService._internal();
     return _instance!;
@@ -24,7 +24,7 @@ class AlarmService {
 
   Future<void> triggerDestinationAlarm(Destination destination) async {
     print('triggerDestinationAlarm called for ${destination.name}');
-    
+
     if (_isAlarmActive) {
       print('Alarm already active, skipping');
       return; // Don't trigger multiple alarms
@@ -32,7 +32,7 @@ class AlarmService {
 
     // Add cooldown period - don't trigger again within 30 seconds
     final now = DateTime.now();
-    if (_lastAlarmTrigger != null && 
+    if (_lastAlarmTrigger != null &&
         now.difference(_lastAlarmTrigger!).inSeconds < 30) {
       print('Alarm cooldown active, skipping');
       return;
@@ -41,16 +41,16 @@ class AlarmService {
     print('Starting alarm for ${destination.name}');
     _isAlarmActive = true;
     _lastAlarmTrigger = now;
-    
+
     // Show fullscreen alarm overlay FIRST (immediate)
     _showAlarmOverlay(destination);
-    
+
     // Start alarm sound (async, don't wait)
     _playAlarmSound();
-    
+
     // Start vibration (async, don't wait)
     _startVibration();
-    
+
     // Auto-dismiss after 30 seconds if not manually dismissed
     _alarmTimer = Timer(const Duration(seconds: 30), () {
       dismissAlarm();
@@ -62,15 +62,17 @@ class AlarmService {
       // Set up looping alarm sound
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
       await _audioPlayer.setVolume(1.0);
-      
+
       // Try to play a system alarm sound
       // This will use platform-specific alarm sounds
-      await _audioPlayer.play(DeviceFileSource('/system/media/audio/alarms/Alarm_Classic.ogg'));
+      await _audioPlayer.play(
+          DeviceFileSource('/system/media/audio/alarms/Alarm_Classic.ogg'));
     } catch (e) {
       try {
         // Fallback to notification sound with loop
         await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-        await _audioPlayer.play(DeviceFileSource('/system/media/audio/notifications/notification_1.ogg'));
+        await _audioPlayer.play(DeviceFileSource(
+            '/system/media/audio/notifications/notification_1.ogg'));
       } catch (e2) {
         // Final fallback to system sound
         _playSystemAlertLoop();
@@ -89,7 +91,7 @@ class AlarmService {
       if (hasVibrator == true) {
         // Simple immediate vibration without delays
         Vibration.vibrate(duration: 500);
-        
+
         // Start a timer for repeated vibrations
         _startVibrationLoop();
       }
@@ -116,11 +118,11 @@ class AlarmService {
 
   void _showAlarmOverlay(Destination destination) {
     print('Creating alarm overlay for ${destination.name}');
-    
+
     // Get the current navigator context
     final navigatorContext = _getNavigatorContext();
     print('Navigator context: $navigatorContext');
-    
+
     if (navigatorContext == null) {
       print('ERROR: No navigator context available for alarm');
       return;
@@ -129,7 +131,7 @@ class AlarmService {
     try {
       final overlay = Overlay.of(navigatorContext);
       print('Overlay found: $overlay');
-      
+
       _overlayEntry = OverlayEntry(
         builder: (context) => AlarmOverlay(
           destination: destination,
@@ -153,13 +155,23 @@ class AlarmService {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.red,
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning, color: Colors.white, size: 30),
-            SizedBox(width: 10),
-            Text(
-              'DESTINATION REACHED!',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            const Icon(Icons.warning, color: Colors.white, size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'DESTINATION REACHED!',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
             ),
           ],
         ),
@@ -215,23 +227,23 @@ class AlarmService {
     if (!_isAlarmActive) return;
 
     _isAlarmActive = false;
-    
+
     // Stop all timers
     _alarmTimer?.cancel();
     _alarmTimer = null;
     _vibrationTimer?.cancel();
     _vibrationTimer = null;
-    
+
     // Stop sound
     await _audioPlayer.stop();
-    
+
     // Stop vibration immediately
     try {
       await Vibration.cancel();
     } catch (e) {
       // Vibration cancellation failed, ignore
     }
-    
+
     // Remove overlay
     _overlayEntry?.remove();
     _overlayEntry = null;
@@ -268,17 +280,17 @@ class _AlarmOverlayState extends State<AlarmOverlay>
   @override
   void initState() {
     super.initState();
-    
+
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    
+
     _shakeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    
+
     _pulseAnimation = Tween<double>(
       begin: 0.8,
       end: 1.2,
@@ -286,7 +298,7 @@ class _AlarmOverlayState extends State<AlarmOverlay>
       parent: _pulseController,
       curve: Curves.easeInOut,
     ));
-    
+
     _shakeAnimation = Tween<double>(
       begin: -10,
       end: 10,
@@ -294,7 +306,7 @@ class _AlarmOverlayState extends State<AlarmOverlay>
       parent: _shakeController,
       curve: Curves.elasticIn,
     ));
-    
+
     _pulseController.repeat(reverse: true);
     _shakeController.repeat(reverse: true);
   }
@@ -308,130 +320,155 @@ class _AlarmOverlayState extends State<AlarmOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
     return Material(
       color: Colors.red.withValues(alpha: 0.95),
       child: SafeArea(
         child: SizedBox(
           width: double.infinity,
           height: double.infinity,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _pulseAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _pulseAnimation.value,
-                    child: AnimatedBuilder(
-                      animation: _shakeAnimation,
-                      builder: (context, child) {
-                        return Transform.translate(
-                          offset: Offset(_shakeAnimation.value, 0),
-                          child: const Icon(
-                            Icons.warning,
-                            size: 120,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: screenSize.width * 0.05,
+                vertical: screenSize.height * 0.05,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 30),
+                  AnimatedBuilder(
+                    animation: _pulseAnimation,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: _pulseAnimation.value,
+                        child: AnimatedBuilder(
+                          animation: _shakeAnimation,
+                          builder: (context, child) {
+                            return Transform.translate(
+                              offset: Offset(_shakeAnimation.value, 0),
+                              child: const Icon(
+                                Icons.warning,
+                                size: 100,
+                                color: Colors.white,
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 30),
+                  Container(
+                    width: screenSize.width * 0.85,
+                    padding: EdgeInsets.symmetric(
+                        horizontal: screenSize.width * 0.02),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'DESTINATION REACHED!',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    margin: EdgeInsets.symmetric(
+                      horizontal: screenSize.width * 0.05,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Text(
+                                widget.destination.name,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'You are within ${widget.destination.radiusInMeters.toInt()}m of your destination',
+                          style: const TextStyle(
+                            fontSize: 15,
                             color: Colors.white,
                           ),
-                        );
-                      },
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 40),
-              const Text(
-                'DESTINATION REACHED!',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(20),
-                margin: const EdgeInsets.symmetric(horizontal: 40),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            widget.destination.name,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'You are within ${widget.destination.radiusInMeters.toInt()}m of your destination',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 60),
-              SizedBox(
-                width: 200,
-                height: 60,
-                child: ElevatedButton(
-                  onPressed: widget.onDismiss,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 8,
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.stop, size: 28),
-                      SizedBox(width: 8),
-                      Text(
-                        'STOP ALARM',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: screenSize.width * 0.6,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: widget.onDismiss,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.red,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
                         ),
+                        elevation: 8,
                       ),
-                    ],
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.stop, size: 26),
+                          SizedBox(width: 8),
+                          Text(
+                            'STOP ALARM',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Tap to dismiss alarm',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Tap to dismiss alarm',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white70,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
