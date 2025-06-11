@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import '../models/destination.dart';
+import '../main.dart';
 
 class AlarmService {
   static AlarmService? _instance;
@@ -19,22 +20,36 @@ class AlarmService {
   bool _isAlarmActive = false;
   BuildContext? _overlayContext;
   OverlayEntry? _overlayEntry;
+  DateTime? _lastAlarmTrigger;
 
   Future<void> triggerDestinationAlarm(Destination destination) async {
+    print('triggerDestinationAlarm called for ${destination.name}');
+    
     if (_isAlarmActive) {
+      print('Alarm already active, skipping');
       return; // Don't trigger multiple alarms
     }
 
+    // Add cooldown period - don't trigger again within 30 seconds
+    final now = DateTime.now();
+    if (_lastAlarmTrigger != null && 
+        now.difference(_lastAlarmTrigger!).inSeconds < 30) {
+      print('Alarm cooldown active, skipping');
+      return;
+    }
+
+    print('Starting alarm for ${destination.name}');
     _isAlarmActive = true;
+    _lastAlarmTrigger = now;
     
-    // Start alarm sound
-    await _playAlarmSound();
-    
-    // Start vibration
-    await _startVibration();
-    
-    // Show fullscreen alarm overlay
+    // Show fullscreen alarm overlay FIRST (immediate)
     _showAlarmOverlay(destination);
+    
+    // Start alarm sound (async, don't wait)
+    _playAlarmSound();
+    
+    // Start vibration (async, don't wait)
+    _startVibration();
     
     // Auto-dismiss after 30 seconds if not manually dismissed
     _alarmTimer = Timer(const Duration(seconds: 30), () {
@@ -63,9 +78,11 @@ class AlarmService {
     }
   }
 
+  Timer? _hapticTimer;
+
   void _playSystemAlertLoop() {
     // Play system alert sound repeatedly
-    Timer.periodic(const Duration(seconds: 1), (timer) {
+    _hapticTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!_isAlarmActive) {
         timer.cancel();
         return;
@@ -78,34 +95,111 @@ class AlarmService {
     try {
       bool? hasVibrator = await Vibration.hasVibrator();
       if (hasVibrator == true) {
-        // Create an alarm-like vibration pattern
-        // Pattern: [wait, vibrate, wait, vibrate] in milliseconds
-        const pattern = [0, 500, 200, 500, 200, 500, 200, 500];
+        // Simple immediate vibration without delays
+        Vibration.vibrate(duration: 500);
         
-        bool? hasCustomVibrations = await Vibration.hasCustomVibrationsSupport();
-        if (hasCustomVibrations == true) {
-          Vibration.vibrate(pattern: pattern, repeat: 0);
-        } else {
-          Vibration.vibrate(duration: 2000);
-        }
+        // Start a timer for repeated vibrations
+        _startVibrationLoop();
       }
     } catch (e) {
       // Vibration not supported, continue without it
     }
   }
 
-  void _showAlarmOverlay(Destination destination) {
-    final context = _getOverlayContext();
-    if (context == null) return;
+  Timer? _vibrationTimer;
 
-    _overlayEntry = OverlayEntry(
-      builder: (context) => AlarmOverlay(
-        destination: destination,
-        onDismiss: dismissAlarm,
+  void _startVibrationLoop() {
+    _vibrationTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!_isAlarmActive) {
+        timer.cancel();
+        return;
+      }
+      try {
+        Vibration.vibrate(duration: 300);
+      } catch (e) {
+        // Ignore vibration errors
+      }
+    });
+  }
+
+  void _showAlarmOverlay(Destination destination) {
+    print('Creating alarm overlay for ${destination.name}');
+    
+    // Get the current navigator context
+    final navigatorContext = _getNavigatorContext();
+    print('Navigator context: $navigatorContext');
+    
+    if (navigatorContext == null) {
+      print('ERROR: No navigator context available for alarm');
+      return;
+    }
+
+    try {
+      final overlay = Overlay.of(navigatorContext);
+      print('Overlay found: $overlay');
+      
+      _overlayEntry = OverlayEntry(
+        builder: (context) => AlarmOverlay(
+          destination: destination,
+          onDismiss: dismissAlarm,
+        ),
+      );
+
+      overlay.insert(_overlayEntry!);
+      print('Alarm overlay inserted successfully');
+    } catch (e) {
+      print('ERROR inserting overlay: $e');
+      // Fallback: try to show a dialog instead
+      _showAlarmDialog(navigatorContext, destination);
+    }
+  }
+
+  void _showAlarmDialog(BuildContext context, Destination destination) {
+    print('Showing alarm dialog as fallback');
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.red,
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.white, size: 30),
+            SizedBox(width: 10),
+            Text(
+              'DESTINATION REACHED!',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              destination.name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'You are within ${destination.radiusInMeters.toInt()}m of your destination',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              dismissAlarm();
+            },
+            child: const Text('STOP ALARM'),
+          ),
+        ],
       ),
     );
-
-    Overlay.of(context).insert(_overlayEntry!);
   }
 
   BuildContext? _getOverlayContext() {
@@ -113,7 +207,21 @@ class AlarmService {
     return _overlayContext;
   }
 
+  BuildContext? _getNavigatorContext() {
+    // Try to get the current navigation context
+    final navigatorKey = _getGlobalNavigatorKey();
+    if (navigatorKey?.currentContext != null) {
+      return navigatorKey!.currentContext!;
+    }
+    return _overlayContext;
+  }
+
+  GlobalKey<NavigatorState>? _getGlobalNavigatorKey() {
+    return navigatorKey;
+  }
+
   void setOverlayContext(BuildContext context) {
+    print('Setting overlay context: $context');
     _overlayContext = context;
   }
 
@@ -122,15 +230,23 @@ class AlarmService {
 
     _isAlarmActive = false;
     
-    // Stop alarm timer
+    // Stop all timers
     _alarmTimer?.cancel();
     _alarmTimer = null;
+    _hapticTimer?.cancel();
+    _hapticTimer = null;
+    _vibrationTimer?.cancel();
+    _vibrationTimer = null;
     
     // Stop sound
     await _audioPlayer.stop();
     
-    // Stop vibration
-    Vibration.cancel();
+    // Stop vibration immediately
+    try {
+      await Vibration.cancel();
+    } catch (e) {
+      // Vibration cancellation failed, ignore
+    }
     
     // Remove overlay
     _overlayEntry?.remove();
@@ -139,6 +255,8 @@ class AlarmService {
 
   void dispose() {
     _audioPlayer.dispose();
+    _hapticTimer?.cancel();
+    _vibrationTimer?.cancel();
     dismissAlarm();
   }
 }

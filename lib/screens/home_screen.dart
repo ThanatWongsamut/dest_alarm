@@ -67,6 +67,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _locationStatus = 'Location updated';
           _isRefreshingLocation = false;
         });
+        
+        // Check proximity whenever location is updated and monitoring is active
+        if (_isMonitoring) {
+          _proximityService.checkProximityManually(position);
+        }
       } else {
         setState(() {
           _locationStatus = 'Location unavailable';
@@ -135,11 +140,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _centerMapOnCurrentLocation() {
-    if (_currentPosition != null) {
-      _mapController.move(
-        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-        15,
-      );
+    if (_currentPosition != null && _showMap) {
+      try {
+        _mapController.move(
+          LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+          15,
+        );
+      } catch (e) {
+        // Map not ready yet, ignore
+      }
     }
   }
 
@@ -183,6 +192,51 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  void _checkProximityNow() {
+    if (_currentPosition != null) {
+      _proximityService.checkProximityManually(_currentPosition!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Proximity check performed. Check debug console for details.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No current location available for proximity check.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _addTestDestination() async {
+    if (_currentPosition != null) {
+      final testDestination = Destination(
+        id: 'test_${DateTime.now().millisecondsSinceEpoch}',
+        name: 'Test Destination',
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        radiusInMeters: 50, // 50 meter radius
+        isActive: true,
+        createdAt: DateTime.now(),
+      );
+
+      await _storageService.saveDestination(testDestination);
+      await _loadDestinations();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Test destination added at current location with 50m radius'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   List<Marker> _buildMapMarkers() {
@@ -335,14 +389,27 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             color: Colors.green.withValues(alpha: 0.1),
-            child: const Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.gps_fixed, color: Colors.green),
-                SizedBox(width: 8),
+                const Row(
+                  children: [
+                    Icon(Icons.gps_fixed, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text(
+                      'Monitoring active destinations',
+                      style: TextStyle(
+                          color: Colors.green, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  'Monitoring active destinations',
-                  style: TextStyle(
-                      color: Colors.green, fontWeight: FontWeight.bold),
+                  'Active destinations: ${_destinations.where((d) => d.isActive).length}',
+                  style: const TextStyle(
+                    color: Colors.green,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -643,12 +710,37 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
+                const PopupMenuItem(
+                  value: 'check_proximity',
+                  child: Row(
+                    children: [
+                      Icon(Icons.radar, size: 20),
+                      SizedBox(width: 8),
+                      Text('Check Proximity Now'),
+                    ],
+                  ),
+                ),
+                if (_currentPosition != null)
+                  const PopupMenuItem(
+                    value: 'add_test_destination',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_location_alt, size: 20),
+                        SizedBox(width: 8),
+                        Text('Add Test Destination Here'),
+                      ],
+                    ),
+                  ),
               ],
               onSelected: (value) {
                 if (value == 'test_alarm') {
                   _testAlarm();
                 } else if (value == 'refresh_settings') {
                   _showRefreshSettings();
+                } else if (value == 'check_proximity') {
+                  _checkProximityNow();
+                } else if (value == 'add_test_destination') {
+                  _addTestDestination();
                 }
               },
             ),

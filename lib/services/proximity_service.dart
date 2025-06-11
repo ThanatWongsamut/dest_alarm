@@ -59,21 +59,32 @@ class ProximityService {
     final destinations = await _storageService.getActiveDestinations();
     
     for (final destination in destinations) {
-      final isWithin = _locationService.isWithinRadius(
+      final distance = _locationService.calculateDistance(
         position.latitude,
         position.longitude,
         destination.latitude,
         destination.longitude,
-        destination.radiusInMeters,
       );
+      
+      final isWithin = distance <= destination.radiusInMeters;
+
+      // Debug: Print proximity check results
+      print('Proximity check - ${destination.name}: distance=${distance.toInt()}m, radius=${destination.radiusInMeters.toInt()}m, within=$isWithin');
 
       if (isWithin && !_triggeredDestinations.contains(destination.id)) {
         _triggeredDestinations.add(destination.id);
+        print('Triggering alarm for ${destination.name}');
         await _alarmService.triggerDestinationAlarm(destination);
       } else if (!isWithin && _triggeredDestinations.contains(destination.id)) {
         _triggeredDestinations.remove(destination.id);
+        print('Removing ${destination.name} from triggered list');
       }
     }
+  }
+
+  // Method to manually check proximity with current position
+  Future<void> checkProximityManually(Position position) async {
+    await _onLocationUpdate(position);
   }
 
   void resetTriggeredDestinations() {

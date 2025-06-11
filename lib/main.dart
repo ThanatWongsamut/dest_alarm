@@ -5,6 +5,8 @@ import 'services/alarm_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/permission_screen.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -43,6 +45,7 @@ class _DestinationAlarmAppState extends State<DestinationAlarmApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Destination Alarm',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
