@@ -4,6 +4,7 @@ import 'package:workmanager/workmanager.dart';
 import 'location_service.dart';
 import 'destination_storage_service.dart';
 import 'alarm_service.dart';
+import 'notification_service.dart';
 
 class ProximityService {
   static ProximityService? _instance;
@@ -17,14 +18,18 @@ class ProximityService {
   final LocationService _locationService = LocationService.instance;
   final DestinationStorageService _storageService = DestinationStorageService();
   final AlarmService _alarmService = AlarmService.instance;
+  final NotificationService _notificationService = NotificationService.instance;
   
   StreamSubscription<Position>? _positionSubscription;
   final Set<String> _triggeredDestinations = <String>{};
+  bool _isMonitoring = false;
 
   Future<void> startProximityMonitoring() async {
-    if (_positionSubscription != null) {
+    if (_isMonitoring) {
       return;
     }
+    
+    _isMonitoring = true;
 
     if (!await _locationService.isLocationPermissionGranted()) {
       await _locationService.requestLocationPermission();
@@ -33,7 +38,23 @@ class ProximityService {
     _positionSubscription = _locationService.getPositionStream().listen(
       _onLocationUpdate,
       onError: (error) {
-        // Location stream error: $error
+        print('Location stream error: $error');
+        // Try to restart the stream after a delay
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_isMonitoring && _positionSubscription == null) {
+            startProximityMonitoring();
+          }
+        });
+      },
+      onDone: () {
+        print('Location stream ended, restarting...');
+        _positionSubscription = null;
+        // Restart the stream if monitoring is still active
+        if (_isMonitoring) {
+          Future.delayed(const Duration(seconds: 2), () {
+            startProximityMonitoring();
+          });
+        }
       },
     );
 
@@ -47,13 +68,22 @@ class ProximityService {
         networkType: NetworkType.not_required,
       ),
     );
+
+    // Show persistent notification when monitoring starts
+    await _notificationService.showPersistentMonitoringNotification();
   }
 
   Future<void> stopProximityMonitoring() async {
+    _isMonitoring = false;
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     await Workmanager().cancelByUniqueName("proximity-check");
+    
+    // Cancel persistent notification when monitoring stops
+    await _notificationService.cancelMonitoringNotification();
   }
+
+  bool get isMonitoring => _isMonitoring;
 
   Future<void> _onLocationUpdate(Position position) async {
     final destinations = await _storageService.getActiveDestinations();

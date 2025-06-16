@@ -17,7 +17,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final DestinationStorageService _storageService = DestinationStorageService();
   final ProximityService _proximityService = ProximityService.instance;
   final LocationService _locationService = LocationService.instance;
@@ -35,15 +35,28 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadDestinations();
     _getCurrentLocation();
     _startLocationRefreshTimer();
+    _checkMonitoringStatus();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _locationRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // App came back to foreground - check and resume monitoring
+      _checkMonitoringStatus();
+      _getCurrentLocation(); // Refresh location
+    }
   }
 
   Future<void> _loadDestinations() async {
@@ -96,6 +109,22 @@ class _HomeScreenState extends State<HomeScreen> {
         timer.cancel();
       }
     });
+  }
+
+  Future<void> _checkMonitoringStatus() async {
+    // Check if monitoring was active and resume if needed
+    await _loadDestinations(); // Refresh destinations first
+    final hasActiveDestinations = _destinations.any((d) => d.isActive);
+    final isProximityMonitoring = _proximityService.isMonitoring;
+    
+    setState(() {
+      _isMonitoring = isProximityMonitoring;
+    });
+    
+    if (hasActiveDestinations && !isProximityMonitoring) {
+      // Resume monitoring if we have active destinations but monitoring is off
+      await _toggleMonitoring();
+    }
   }
 
   String _getLocationAge() {
